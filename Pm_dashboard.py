@@ -232,57 +232,38 @@ with tab1:
     st.title("🛠️ Maintenance PM Dashboard")
     st.caption("Tap the KPI tiles to filter. ‘Clear Filter’ resets it. Red = late, Yellow = almost due, Green = fine.")
 
-    # Build status counts
-    counts = {"Overdue":0,"Due Soon":0,"OK":0,"Unknown":0,"Paused":0,"Retired":0}
-    for _, r in st.session_state.df.iterrows():
-        s, _ = compute_status(r, st.session_state.due_soon_days, st.session_state.meter_soon)
-        counts[s] = counts.get(s,0)+1
+    # # -----------------------
+# KPI tiles (fully clickable)
+# -----------------------
+# Build status counts
+counts = {"Overdue":0,"Due Soon":0,"OK":0,"Unknown":0,"Paused":0,"Retired":0}
+for _, r in st.session_state.df.iterrows():
+    s, _ = compute_status(r, st.session_state.due_soon_days, st.session_state.meter_soon)
+    counts[s] = counts.get(s, 0) + 1
 
-    # KPI tiles (clickable)
-    kc1, kc2, kc3, kc4, kc5, kc6, kc7 = st.columns([1,1,1,1,1,1,1])
-    def kpi(label, key, css_class):
-        with key:
-            if st.button(f"{label}\n{counts[label]}", use_container_width=True):
-                st.session_state.status_filter = label
-        st.markdown(f"<div class='kpi {css_class}'><h2>{counts[label]}</h2><span>{label}</span></div>", unsafe_allow_html=True)
+c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
 
-    with kc1: 
-        if st.button("Overdue", key="k_over"):
-            st.session_state.status_filter = "Overdue"
-        st.markdown(f"<div class='kpi overdue'><h2>{counts['Overdue']}</h2><span>Overdue</span></div>", unsafe_allow_html=True)
+def kpi_button(col, label):
+    # Big, tap-friendly button that sets the filter
+    with col:
+        clicked = st.button(f"{label}\n{counts[label]}", key=f"kpi_{label.replace(' ','_')}", use_container_width=True)
+        if clicked:
+            st.session_state.status_filter = label
 
-    with kc2:
-        if st.button("Due Soon", key="k_soon"):
-            st.session_state.status_filter = "Due Soon"
-        st.markdown(f"<div class='kpi duesoon'><h2>{counts['Due Soon']}</h2><span>Due Soon</span></div>", unsafe_allow_html=True)
+kpi_button(c1, "Overdue")
+kpi_button(c2, "Due Soon")
+kpi_button(c3, "OK")
+kpi_button(c4, "Unknown")
+kpi_button(c5, "Paused")
+kpi_button(c6, "Retired")
 
-    with kc3:
-        if st.button("OK", key="k_ok"):
-            st.session_state.status_filter = "OK"
-        st.markdown(f"<div class='kpi ok'><h2>{counts['OK']}</h2><span>OK</span></div>", unsafe_allow_html=True)
+with c7:
+    if st.button("Clear Filter", use_container_width=True, key="kpi_clear"):
+        st.session_state.status_filter = None
+sf = st.session_state.status_filter or "(none)"
+st.caption(f"Active KPI filter: **{sf}**")
 
-    with kc4:
-        if st.button("Unknown", key="k_unk"):
-            st.session_state.status_filter = "Unknown"
-        st.markdown(f"<div class='kpi unknown'><h2>{counts['Unknown']}</h2><span>Unknown</span></div>", unsafe_allow_html=True)
-
-    with kc5:
-        if st.button("Paused", key="k_pause"):
-            st.session_state.status_filter = "Paused"
-        st.markdown(f"<div class='kpi paused'><h2>{counts['Paused']}</h2><span>Paused</span></div>", unsafe_allow_html=True)
-
-    with kc6:
-        if st.button("Retired", key="k_ret"):
-            st.session_state.status_filter = "Retired"
-        st.markdown(f"<div class='kpi retired'><h2>{counts['Retired']}</h2><span>Retired</span></div>", unsafe_allow_html=True)
-
-    with kc7:
-        if st.button("Clear Filter", key="k_clear", use_container_width=True):
-            st.session_state.status_filter = None
-        sf = st.session_state.status_filter or "(none)"
-        st.caption(f"Active KPI filter: **{sf}**")
-
-    st.divider()
+st.divider()
 
     # Add / Edit
     st.subheader("➕ Add / ✏️ Edit PM")
