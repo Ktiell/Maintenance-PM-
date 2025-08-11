@@ -1,10 +1,10 @@
 # pm_dashboard.py
-# Full Maintenance PM Dashboard (Streamlit)
-# - Clickable KPI filters (Overdue / Due Soon / OK / etc.) + Clear Filter
-# - "Assets Maintained" tab (one row per asset; shows components, tasks, earliest due)
-# - Time or meter PM with next-due calc, color-coded table
+# Full Maintenance PM Dashboard (Streamlit) — Clean, working KPIs
+# - Clickable KPI buttons (Overdue / Due Soon / OK / Unknown / Paused / Retired) + Clear Filter
+# - "Assets Maintained" tab (one line per asset with tasks and earliest due)
+# - Time or meter PM with next-due calc, color-coded urgency column
 # - Add/Edit PMs, Log Completion, CSV import/export, bulk meter update, printable schedule
-# - Optimized: fewer expensive styling passes, cached options, tight layout
+# - Optimized for snappy loads
 
 import os
 from datetime import datetime, timedelta, date
@@ -26,24 +26,8 @@ INTERVAL_TYPES = ["Days", "Weeks", "Months", "Meter"]
 DUE_SOON_DAYS_DEFAULT = 14
 METER_SOON_THRESHOLD_DEFAULT = 50
 
-CSS = """
-<style>
-.block-container { padding-top: 0.75rem !important; }
-.badge {display:inline-block;padding:0.25rem 0.6rem;border-radius:999px;font-size:0.75rem;font-weight:600;margin-right:0.4rem;background:#eee;}
-.badge.red{background:#ffe5e5;color:#b00020;} .badge.yellow{background:#fff4db;color:#6a4a00;}
-.badge.green{background:#e7f7ed;color:#006d3b;} .badge.gray{background:#ececec;color:#333;}
-.kpi {width:100%; border:1px solid #eee; border-radius:12px; padding:0.7rem 0.8rem; text-align:center; cursor:pointer;}
-.kpi h2 {margin:0;font-size:1.4rem;}
-.kpi span {display:block; font-size:0.8rem; opacity:0.8;}
-.kpi.overdue{background:#ffe5e5;} .kpi.duesoon{background:#fff4db;}
-.kpi.ok{background:#e7f7ed;} .kpi.unknown{background:#f3f3f3;}
-.kpi.paused{background:#f3f3f3;} .kpi.retired{background:#f3f3f3;}
-</style>
-"""
-st.markdown(CSS, unsafe_allow_html=True)
-
 # -----------------------
-# Helpers
+# Helper functions
 # -----------------------
 def today_str(): return date.today().strftime(DATE_FMT)
 
@@ -177,7 +161,7 @@ def export_csv_button(df, label="Download CSV"):
 if "df" not in st.session_state: st.session_state.df = load_data()
 if "due_soon_days" not in st.session_state: st.session_state.due_soon_days = DUE_SOON_DAYS_DEFAULT
 if "meter_soon" not in st.session_state: st.session_state.meter_soon = METER_SOON_THRESHOLD_DEFAULT
-if "status_filter" not in st.session_state: st.session_state.status_filter = None  # From KPI clicks
+if "status_filter" not in st.session_state: st.session_state.status_filter = None  # set by KPI clicks
 
 # -----------------------
 # Sidebar
@@ -230,42 +214,35 @@ tab1, tab2 = st.tabs(["📊 Dashboard", "📒 Assets Maintained"])
 # -----------------------
 with tab1:
     st.title("🛠️ Maintenance PM Dashboard")
-    st.caption("Tap the KPI tiles to filter. ‘Clear Filter’ resets it. Red = late, Yellow = almost due, Green = fine.")
+    st.caption("Tap a KPI button to filter. ‘Clear Filter’ resets it. Red = late, Yellow = almost due, Green = fine.")
 
-    # # -----------------------
-# KPI tiles (fully clickable)
-# -----------------------
-# Build status counts
-counts = {"Overdue":0,"Due Soon":0,"OK":0,"Unknown":0,"Paused":0,"Retired":0}
-for _, r in st.session_state.df.iterrows():
-    s, _ = compute_status(r, st.session_state.due_soon_days, st.session_state.meter_soon)
-    counts[s] = counts.get(s, 0) + 1
+    # ---------- KPI buttons (fully clickable) ----------
+    counts = {"Overdue":0,"Due Soon":0,"OK":0,"Unknown":0,"Paused":0,"Retired":0}
+    for _, r in st.session_state.df.iterrows():
+        s, _ = compute_status(r, st.session_state.due_soon_days, st.session_state.meter_soon)
+        counts[s] = counts.get(s, 0) + 1
 
-c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+    def kpi_button(col, label):
+        with col:
+            if st.button(f"{label}\n{counts[label]}", key=f"kpi_{label.replace(' ','_')}", use_container_width=True):
+                st.session_state.status_filter = label
 
-def kpi_button(col, label):
-    # Big, tap-friendly button that sets the filter
-    with col:
-        clicked = st.button(f"{label}\n{counts[label]}", key=f"kpi_{label.replace(' ','_')}", use_container_width=True)
-        if clicked:
-            st.session_state.status_filter = label
+    kpi_button(c1, "Overdue")
+    kpi_button(c2, "Due Soon")
+    kpi_button(c3, "OK")
+    kpi_button(c4, "Unknown")
+    kpi_button(c5, "Paused")
+    kpi_button(c6, "Retired")
 
-kpi_button(c1, "Overdue")
-kpi_button(c2, "Due Soon")
-kpi_button(c3, "OK")
-kpi_button(c4, "Unknown")
-kpi_button(c5, "Paused")
-kpi_button(c6, "Retired")
+    with c7:
+        if st.button("Clear Filter", key="kpi_clear", use_container_width=True):
+            st.session_state.status_filter = None
+        st.caption(f"Active KPI filter: **{st.session_state.status_filter or '(none)'}**")
 
-with c7:
-    if st.button("Clear Filter", use_container_width=True, key="kpi_clear"):
-        st.session_state.status_filter = None
-sf = st.session_state.status_filter or "(none)"
-st.caption(f"Active KPI filter: **{sf}**")
+    st.divider()
 
-st.divider()
-
-    # Add / Edit
+    # ---------- Add / Edit ----------
     st.subheader("➕ Add / ✏️ Edit PM")
     with st.expander("Open Form", expanded=False):
         df = st.session_state.df
@@ -329,7 +306,7 @@ st.divider()
                     st.session_state.df = st.session_state.df.drop(index=idx).reset_index(drop=True)
                     save_data(st.session_state.df); st.success("PM deleted.")
 
-    # Log Completion
+    # ---------- Log Completion ----------
     st.subheader("📘 Log Completion")
     with st.expander("Update a PM as completed", expanded=False):
         df = st.session_state.df
@@ -351,7 +328,7 @@ st.divider()
         else:
             st.info("No PMs available.")
 
-    # Apply filters
+    # ---------- Apply filters ----------
     def apply_filters(df_in):
         out = df_in.copy()
         if site_f != "(All)": out = out[out["Site"] == site_f]
@@ -359,7 +336,7 @@ st.divider()
         if priority_f != "(All)": out = out[out["Priority"] == priority_f]
         if pmstatus_f != "(All)": out = out[out["PMStatus"] == pmstatus_f]
         if interval_f: out = out[out["IntervalType"].isin(interval_f)]
-        # KPI status filter (from clicks)
+        # KPI status filter (from buttons)
         if st.session_state.status_filter:
             keep = []
             for _, r in out.iterrows():
@@ -380,7 +357,7 @@ st.divider()
 
     filtered = apply_filters(st.session_state.df)
 
-    # Display table with computed status & urgency
+    # ---------- Display table ----------
     disp = filtered.copy()
     due_statuses, urgency = [], []
     for _, r in disp.iterrows():
@@ -392,8 +369,43 @@ st.divider()
     disp = ensure_columns(disp).reindex(columns=view_cols, fill_value="")
 
     st.subheader("📋 PM List")
-    st.caption("Tip: use the KPI tiles above to jump straight to Overdue/Due Soon/OK.")
+    st.caption("Use the KPI buttons above to jump straight to Overdue/Due Soon/OK.")
     st.dataframe(disp, use_container_width=True, height=520)
 
-    # Bulk meter update
-    st.subheader("⛽ Quick Meter Update
+    # ---------- Bulk meter update ----------
+    st.subheader("⛽ Quick Meter Update")
+    with st.expander("Update current meter on one or more assets", expanded=False):
+        if len(filtered):
+            selection = st.multiselect("Select rows", [f"{i}: {r.AssetName} • {r.PMTask}" for i, r in filtered.iterrows()])
+            new_cm = st.text_input("New Current Meter value")
+            if st.button("Update Meters", use_container_width=True):
+                if not new_cm.strip():
+                    st.warning("Enter a meter value.")
+                else:
+                    for token in selection:
+                        ix = int(token.split(":")[0])
+                        st.session_state.df.at[ix,"CurrentMeter"] = new_cm.strip()
+                        row = st.session_state.df.loc[ix].to_dict()
+                        nd_date, nd_meter = compute_next_due(row)
+                        st.session_state.df.at[ix,"NextDueDate"] = nd_date.strftime(DATE_FMT) if isinstance(nd_date,(date,datetime)) else ""
+                        st.session_state.df.at[ix,"NextDueMeter"] = nd_meter if nd_meter is not None else ""
+                    save_data(st.session_state.df); st.success("Meters updated.")
+        else:
+            st.info("No rows match the current filters.")
+
+    # ---------- Printable schedule ----------
+    st.subheader("🖨️ Printable Schedule")
+    with st.expander("Compact view for printing", expanded=False):
+        compact = filtered.copy()
+        compact = compact.assign(
+            Due=lambda d: d.apply(lambda r: parse_date(r["NextDueDate"]).strftime(DATE_FMT) if parse_date(r["NextDueDate"]) else (str(r["NextDueMeter"]) if r["NextDueMeter"] not in [None,"","nan"] else ""), axis=1),
+            Type=lambda d: d["IntervalType"], Every=lambda d: d["IntervalValue"],
+            Owner=lambda d: d["Owner"].fillna(""), Pri=lambda d: d["Priority"]
+        )[
+            ["Site","AssetID","AssetName","Component","PMTask","Type","Every","Due","Owner","Pri","Notes"]
+        ].sort_values(by=["Site","AssetName","Component","PMTask"])
+        st.dataframe(compact, use_container_width=True, height=400)
+        export_csv_button(compact, "⬇️ Download printable schedule (CSV)")
+
+# -----------------------
+# Assets Maint
